@@ -1,15 +1,75 @@
 import requests
 import random
 from io import BytesIO
-from PIL import Image as pimage
+from PIL import Image as pimage, ImageTk
+import tkinter as tk
 from tkinter import *
 from tkinter import ttk
 from tkinter import font
 
+
+
+class ToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        widget.bind("<Enter>", self.show_tip)
+        widget.bind("<Leave>", self.hide_tip)
+
+    def show_tip(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        # create a small popup near the widget
+        x, y, cx, cy = self.widget.bbox("insert")
+        x = x + self.widget.winfo_rootx() + 25
+        y = y + self.widget.winfo_rooty() + 20
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)  # no border, title bar, etc.
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            tw, text=self.text, background="lightyellow",
+            relief="solid", borderwidth=1,
+            font=("Segoe UI", 9)
+        )
+        label.pack(ipadx=4, ipady=2)
+
+    def hide_tip(self, event=None):
+        if self.tip_window:
+            self.tip_window.destroy()
+            self.tip_window = None
+
+
+def add_placeholder(entry, placeholder, color="grey"):
+    normal_fg = entry.cget("foreground")
+
+    def on_focus_in(event):
+        if entry.get() == placeholder:
+            entry.delete(0, "end")
+            entry.config(foreground=normal_fg)
+
+    def on_focus_out(event):
+        if not entry.get():
+            entry.insert(0, placeholder)
+            entry.config(foreground=color)
+
+    # Set initial placeholder
+    entry.insert(0, placeholder)
+    entry.config(foreground=color)
+
+    entry.bind("<FocusIn>", on_focus_in)
+    entry.bind("<FocusOut>", on_focus_out)
+
+
 root = Tk()
 root.title("Shiny Hunting Simulator")
+root.iconbitmap("images/shinyhuntsim.ico")
+
+root.attributes("-fullscreen", False)
+root.resizable(False, False)
 
 big_font = font.Font(family="Arial", size=14)
+reg_font = font.Font(family="Arial", size=12)
 root.option_add("*TButton.Font", big_font)
 root.option_add("*TLabel.Font", big_font)
 root.option_add("*TEntry.Font", big_font)
@@ -26,34 +86,54 @@ frm_right.grid(column=1, row=0)
 pkmn_label = ttk.Label(frm_left, text="Pokemon?")
 pkmn_label.grid(column=0, row=0)
 
-# Entry box for user input
+# Entry box for pokemon input
 pkmn_entry = ttk.Entry(frm_left)
 pkmn_entry.grid(column=1, row=0)
+add_placeholder(pkmn_entry, "name or dex number")
 
 # Label for odds field
-odds_label = ttk.Label(frm_left, text="odds?")
+odds_label = ttk.Label(frm_left, text="Odds?")
 odds_label.grid(column=0, row=1)
 
-# Entry box for user input
+# Entry box for odds input
 odds_entry = ttk.Entry(frm_left)
 odds_entry.grid(column=1, row=1)
+add_placeholder(odds_entry, "e.g. 8192 for 1/8192")
+
+img = pimage.open("images/info.png")   # path to your downloaded icon
+img = img.resize((16, 16), pimage.Resampling.LANCZOS)
+info_icon = ImageTk.PhotoImage(img)
+
+info_label = ttk.Label(frm_left, image=info_icon)
+info_label.grid(column=2, row=1)
+ToolTip(info_label, "Leave blank for full odds, relative to the Pokemon's home generation.")
 
 # Label for cooldown field
-cd_label = ttk.Label(frm_left, text="cooldown? (seconds)")
+cd_label = ttk.Label(frm_left, text="Cooldown?")
 cd_label.grid(column=0, row=2)
 
-# Entry box for user input
+# Entry box for cooldown input
 cd_entry = ttk.Entry(frm_left)
 cd_entry.grid(column=1, row=2)
+add_placeholder(cd_entry, "in seconds")
 
 # text output
 count_label = ttk.Label(frm_left, text="")
 count_label.grid(column=0, row=11, columnspan=2)
 
-# image of pokemon
-image_label = ttk.Label(frm_right)
-image_label.grid(column=0, row=0)
+# get the default image
+photo = PhotoImage(file="images/default image.png")
 
+# image of pokemon
+image_label = ttk.Label(frm_right, image=photo)
+image_label.grid(column=0, row=0)
+image_label.image = photo
+
+
+def update_size():
+    root.update_idletasks()   # let Tkinter calculate widget sizes
+    root.minsize(root.winfo_width(), root.winfo_height())
+    root.maxsize(root.winfo_width(), root.winfo_height()) 
 
 def fetch_valid_image(urls):
     """Tries a list of URLs and returns the first valid image URL."""
@@ -95,21 +175,25 @@ def get_img(shiny, poke_id):
     # Controleer beschikbaarheid met één GET request
     img = fetch_valid_image([official_art] + fallback)
     if not img:
-        return "https://i.imgur.com/CK0spW8.png"
+        return PhotoImage(file="images/notfound.png")
     
-    frm_rightbytes = BytesIO(img.content)
+    img_bytes = BytesIO(img.content)
 
     if shiny:
-        frm_rightbytes = add_shiny_icon(frm_rightbytes)
+        img_bytes = add_shiny_icon(img_bytes)
 
-    return PhotoImage(data=frm_rightbytes.getvalue())
+    reimage = pimage.open(img_bytes)
+    resized = reimage.resize((600,600), pimage.Resampling.LANCZOS)
+    photo = ImageTk.PhotoImage(resized)
+
+    return photo
 
 
 def encounter():
     mon = pkmn_entry.get()
 
     if mon:
-        mon = mon.lower()
+        mon = mon.lower().replace(" ", "-")
         try:
             species = requests.get(f"https://pokeapi.co/api/v2/pokemon-species/{mon}").json()
             dexnr =  species["id"]
@@ -151,6 +235,8 @@ def encounter():
     rand = random.randint(1,odds)
     shiny = rand == 1
 
+    print(f"odds: 1/{odds}, cooldown: {cooldown}, rand: {rand}, shiny: {shiny}")
+
     count_text = f"encounters done: {btn.count}"
     photo = get_img(shiny, dexnr)
 
@@ -158,9 +244,12 @@ def encounter():
     image_label.config(image=photo)
     image_label.image = photo  # <-- keep reference alive
 
+
 btn = ttk.Button(frm_left, text="Encounter!", command=lambda: encounter())
 btn.grid(column=0, row=10, columnspan=2, ipadx=30, ipady=10, pady=(10, 5))
 btn.old_mon = ""
 btn.count = 0
+
+update_size()
 
 root.mainloop()
