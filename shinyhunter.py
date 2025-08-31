@@ -4,45 +4,55 @@ from io import BytesIO
 from PIL import Image as pimage
 from tkinter import *
 from tkinter import ttk
+from tkinter import font
 
 root = Tk()
 root.title("Shiny Hunting Simulator")
 
+big_font = font.Font(family="Arial", size=14)
+root.option_add("*TButton.Font", big_font)
+root.option_add("*TLabel.Font", big_font)
+root.option_add("*TEntry.Font", big_font)
 
-frm = ttk.Frame(root, padding=10)
-frm.grid()
+# frame and grid for prompts and buttons
+frm_left = ttk.Frame(root, padding=10)
+frm_left.grid(column=0, row=0)
 
+# frame for pokemon image
+frm_right = ttk.Frame(root, padding=10)
+frm_right.grid(column=1, row=0)
 
-# Label for odds
-pkmn_label = ttk.Label(frm, text="Pokemon?")
+# Label for pokemon field
+pkmn_label = ttk.Label(frm_left, text="Pokemon?")
 pkmn_label.grid(column=0, row=0)
 
 # Entry box for user input
-pkmn_entry = ttk.Entry(frm)
+pkmn_entry = ttk.Entry(frm_left)
 pkmn_entry.grid(column=1, row=0)
 
-# Label for odds
-odds_label = ttk.Label(frm, text="odds?")
+# Label for odds field
+odds_label = ttk.Label(frm_left, text="odds?")
 odds_label.grid(column=0, row=1)
 
 # Entry box for user input
-odds_entry = ttk.Entry(frm)
+odds_entry = ttk.Entry(frm_left)
 odds_entry.grid(column=1, row=1)
 
-# Label for cooldown
-cd_label = ttk.Label(frm, text="cooldown? (seconds)")
+# Label for cooldown field
+cd_label = ttk.Label(frm_left, text="cooldown? (seconds)")
 cd_label.grid(column=0, row=2)
 
 # Entry box for user input
-cd_entry = ttk.Entry(frm)
+cd_entry = ttk.Entry(frm_left)
 cd_entry.grid(column=1, row=2)
 
-#text output
-result_label = ttk.Label(frm, text="")
-result_label.grid(column=1, row=10)
+# text output
+count_label = ttk.Label(frm_left, text="")
+count_label.grid(column=0, row=11, columnspan=2)
 
-image_label = ttk.Label(frm)
-image_label.grid(column=0, row=8)
+# image of pokemon
+image_label = ttk.Label(frm_right)
+image_label.grid(column=0, row=0)
 
 
 def fetch_valid_image(urls):
@@ -75,6 +85,7 @@ def add_shiny_icon(bytes):
     
     return output_bytes
 
+
 def get_img(shiny, poke_id):
     # Bepaal de URL's
     base_url = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other"
@@ -86,13 +97,12 @@ def get_img(shiny, poke_id):
     if not img:
         return "https://i.imgur.com/CK0spW8.png"
     
-    img_bytes = BytesIO(img.content)
+    frm_rightbytes = BytesIO(img.content)
 
     if shiny:
-        img_bytes = add_shiny_icon(img_bytes)
+        frm_rightbytes = add_shiny_icon(frm_rightbytes)
 
-    return PhotoImage(data=img_bytes.getvalue())
-
+    return PhotoImage(data=frm_rightbytes.getvalue())
 
 
 def encounter():
@@ -103,51 +113,54 @@ def encounter():
         try:
             species = requests.get(f"https://pokeapi.co/api/v2/pokemon-species/{mon}").json()
             dexnr =  species["id"]
-            gennr = species['generation']['url'].split('/')[-2]
+            gennr = int(species['generation']['url'].split('/')[-2])
 
             pkmn = requests.get(f"https://pokeapi.co/api/v2/pokemon/{dexnr}").json()
 
         except:
-            result_label.config(text=f"{mon.capitalize()} is not a valid Pokemon")
+            count_label.config(text=f"{mon.capitalize()} is not a valid Pokemon")
             return
 
-
-
     else:
-        result_label.config(text=f"Please input a Pokemon name or dex number.")
+        count_label.config(text=f"Please input a Pokemon name or dex number.")
         return
+
+    if btn.old_mon == mon:
+        btn.count += 1
+    
+    else:
+        btn.count = 1
+        btn.old_mon = mon
 
     try:
         cooldown = int(cd_entry.get()) * 1000 # read number from entry
 
-
     except ValueError:
         cooldown = 3000
         
-
     # disable button for cooldown
     btn.config(state=DISABLED)
     root.after(cooldown, lambda: btn.config(state=NORMAL))  # 1000 ms = 1 second
-
 
     try:
         odds = int(odds_entry.get())  # read number from entry
 
     except ValueError:
-        odds = 20
+        odds = 8192 if gennr < 6 else 4096
 
     rand = random.randint(1,odds)
     shiny = rand == 1
 
+    count_text = f"encounters done: {btn.count}"
     photo = get_img(shiny, dexnr)
 
-    result = "shiny" if shiny else "regular ass"
-
-    result_label.config(text=result)
+    count_label.config(text=count_text)
     image_label.config(image=photo)
     image_label.image = photo  # <-- keep reference alive
 
-btn = ttk.Button(frm, text="Encounter!", command=lambda: encounter())
-btn.grid(column=0, row=10)
+btn = ttk.Button(frm_left, text="Encounter!", command=lambda: encounter())
+btn.grid(column=0, row=10, columnspan=2, ipadx=30, ipady=10, pady=(10, 5))
+btn.old_mon = ""
+btn.count = 0
 
 root.mainloop()
