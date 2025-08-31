@@ -1,3 +1,4 @@
+import os, sys
 import requests
 import random
 from io import BytesIO
@@ -7,6 +8,13 @@ from tkinter import *
 from tkinter import ttk
 from tkinter import font
 
+
+
+def resource_path(relative_path):
+    """Get path whether running as script or PyInstaller exe"""
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 
 
 class ToolTip:
@@ -63,7 +71,7 @@ def add_placeholder(entry, placeholder, color="grey"):
 
 root = Tk()
 root.title("Shiny Hunting Simulator")
-root.iconbitmap("images/shinyhuntsim.ico")
+root.iconbitmap(resource_path("images/shinyhuntsim.ico"))
 
 root.attributes("-fullscreen", False)
 root.resizable(False, False)
@@ -100,7 +108,7 @@ odds_entry = ttk.Entry(frm_left)
 odds_entry.grid(column=1, row=1)
 add_placeholder(odds_entry, "e.g. 8192 for 1/8192")
 
-img = pimage.open("images/info.png")   # path to your downloaded icon
+img = pimage.open(resource_path("images/info.png"))   # path to your downloaded icon
 img = img.resize((16, 16), pimage.Resampling.LANCZOS)
 info_icon = ImageTk.PhotoImage(img)
 
@@ -122,7 +130,7 @@ count_label = ttk.Label(frm_left, text="")
 count_label.grid(column=0, row=11, columnspan=2)
 
 # get the default image
-photo = PhotoImage(file="images/default image.png")
+photo = PhotoImage(file=resource_path("images/default image.png"))
 
 # image of pokemon
 image_label = ttk.Label(frm_right, image=photo)
@@ -149,7 +157,7 @@ def fetch_valid_image(urls):
 
 def add_shiny_icon(bytes):
     background = pimage.open(bytes).convert("RGBA")
-    icon = pimage.open("images/shiny_icon_red_512.png").resize((50, 50), pimage.LANCZOS).convert("RGBA")
+    icon = pimage.open(resource_path("images/shiny_icon_red_512.png")).resize((50, 50), pimage.LANCZOS).convert("RGBA")
 
     # Versnelde pixelbewerking
     # Niets
@@ -175,7 +183,7 @@ def get_img(shiny, poke_id):
     # Controleer beschikbaarheid met één GET request
     img = fetch_valid_image([official_art] + fallback)
     if not img:
-        return PhotoImage(file="images/notfound.png")
+        return PhotoImage(file=resource_path("images/notfound.png"))
     
     img_bytes = BytesIO(img.content)
 
@@ -235,7 +243,7 @@ def encounter():
     rand = random.randint(1,odds)
     shiny = rand == 1
 
-    print(f"odds: 1/{odds}, cooldown: {cooldown}, rand: {rand}, shiny: {shiny}")
+    # print(f"odds: 1/{odds}, cooldown: {cooldown}, rand: {rand}, shiny: {shiny}")
 
     count_text = f"encounters done: {btn.count}"
     photo = get_img(shiny, dexnr)
