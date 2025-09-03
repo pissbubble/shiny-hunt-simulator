@@ -7,6 +7,8 @@ import tkinter as tk
 from tkinter import *
 from tkinter import ttk
 from tkinter import font
+import winsound
+import threading
 
 
 
@@ -108,7 +110,7 @@ odds_entry = ttk.Entry(frm_left)
 odds_entry.grid(column=1, row=1)
 add_placeholder(odds_entry, "e.g. 8192 for 1/8192")
 
-img = pimage.open(resource_path("images/info.png"))   # path to your downloaded icon
+img = pimage.open(resource_path("images/info.png"))
 img = img.resize((16, 16), pimage.Resampling.LANCZOS)
 info_icon = ImageTk.PhotoImage(img)
 
@@ -130,19 +132,67 @@ count_label = ttk.Label(frm_left, text="")
 count_label.grid(column=0, row=11, columnspan=2)
 
 # get the default image
-photo = PhotoImage(file=resource_path("images/default image.png"))
+default_img = PhotoImage(file=resource_path("images/default image.png"))
 
 # image of pokemon
-image_label = ttk.Label(frm_right, image=photo)
-image_label.grid(column=0, row=0)
-image_label.image = photo
+canvas = tk.Canvas(frm_right, height=600, width=600)
+canvas.grid(column=0, row=0)
+
+image_item = canvas.create_image(300, 300, image=default_img)
+canvas.poke_img = default_img
+canvas.image = default_img
+canvas.frames = []
 
 
+# image_label = ttk.Label(frm_right, image=default_img)
+# image_label.grid(column=0, row=0)
+# image_label.image = default_img
+
+# #shiny sparkle animation
+anim = pimage.open(resource_path("images/shiny anim.webp"))
+
+preframes = []
+try:
+    while True:
+        frame = anim.copy()
+        preframes.append(frame.convert("RGBA"))
+        anim.seek(len(preframes))
+except EOFError:
+    pass
+
+def composite(base):
+    pil_frames = []
+    for frame in preframes:
+        composed = base.copy()
+        composed.alpha_composite(frame)
+        pil_frames.append(composed)
+    pil_frames.append(base.copy())
+    # send result back to main thread
+    root.after(0, lambda: convert_to_tk(pil_frames))
+
+def convert_to_tk(pil_frames):
+    tk_frames = [ImageTk.PhotoImage(frame) for frame in pil_frames]
+    canvas.frames = tk_frames
+
+def animate(idx=0):
+    if idx >= len(canvas.frames):
+        return
+
+    frame = canvas.frames[idx]
+    canvas.tk_frame = frame
+    
+    canvas.itemconfig(image_item, image = frame)
+    root.after(32, animate, idx + 2)
+
+
+# size shit
 def update_size():
     root.update_idletasks()   # let Tkinter calculate widget sizes
     root.minsize(root.winfo_width(), root.winfo_height())
     root.maxsize(root.winfo_width(), root.winfo_height()) 
 
+
+# image shit
 def fetch_valid_image(urls):
     """Tries a list of URLs and returns the first valid image URL."""
     for url in urls:
@@ -197,6 +247,12 @@ def get_img(shiny, poke_id):
     return photo
 
 
+# the sound
+def sparkle():
+    threading.Thread(target=winsound.PlaySound, args=(resource_path("sounds/shiny.wav"), winsound.SND_FILENAME), daemon=True).start()
+
+
+# encounter func
 def encounter():
     mon = pkmn_entry.get()
 
@@ -216,6 +272,9 @@ def encounter():
     else:
         count_label.config(text=f"Please input a Pokemon name or dex number.")
         return
+    
+    canvas.itemconfig(image_item, image=default_img)
+    canvas.image = default_img
 
     if btn.old_mon == mon:
         btn.count += 1
@@ -229,10 +288,12 @@ def encounter():
 
     except ValueError:
         cooldown = 3000
+    
+    btn_lock = cooldown + 1000
         
     # disable button for cooldown
     btn.config(state=DISABLED)
-    root.after(cooldown, lambda: btn.config(state=NORMAL))  # 1000 ms = 1 second
+    root.after(btn_lock, lambda: btn.config(state=NORMAL))  # 1000 ms = 1 second
 
     try:
         odds = int(odds_entry.get())  # read number from entry
@@ -249,8 +310,28 @@ def encounter():
     photo = get_img(shiny, dexnr)
 
     count_label.config(text=count_text)
-    image_label.config(image=photo)
-    image_label.image = photo  # <-- keep reference alive
+    
+    
+
+    # canvas.itemconfig(image_item, image=photo)
+    
+    if shiny:
+
+        pokemon_pil = ImageTk.getimage(photo).convert("RGBA")
+        canvas.poke_img = pokemon_pil
+
+
+        threading.Thread(target=composite, args=(pokemon_pil,), daemon=True).start()
+
+    root.after(cooldown, lambda: reveal(photo, shiny))
+
+def reveal(photo, shiny):
+    canvas.itemconfig(image_item, image=photo)
+    canvas.image = photo
+
+    if shiny:
+        animate()
+        sparkle()
 
 
 btn = ttk.Button(frm_left, text="Encounter!", command=lambda: encounter())
